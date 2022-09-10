@@ -16,8 +16,26 @@ class NodeableFactory extends Factory
         // $this->model =  ModelService::nodeModel();
         return [
             'name'        => $this->faker->name(),
-            'father_name' => $this->faker->name(),
-            'birth_date'  => $this->faker->date(),
+            gender()      => $this->faker->randomElement([male(),female()]),
+            'b_date'  => $this->faker->date(),
         ];
+    }
+
+    public function male()
+    {
+        return $this->state(function (array $attributes) {
+            return [
+                gender() => male(),
+            ];
+        });
+    }
+
+    public function female()
+    {
+        return $this->state(function (array $attributes) {
+            return [
+                gender() => female(),
+            ];
+        });
     }
 }

@@ -22,5 +22,6 @@ class TreeNode extends Model
     /**
      * @var array make these field allowed for masse assign 
      */
-    protected $fillable = ['nodeable_id','treeable_id','gender','photo'];
+    // protected $fillable = ['nodeable_id','treeable_id','gender','photo'];
+    protected $guarded  = [];
 }

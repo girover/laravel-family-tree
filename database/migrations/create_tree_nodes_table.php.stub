@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateNodesTable extends Migration
+class CreateTreeNodesTable extends Migration
 {
     /**
      * Run the migrations.
@@ -17,13 +17,13 @@ class CreateNodesTable extends Migration
             $table->id('node_id'); // unsigned big integer
             $table->bigInteger('nodeable_id')->unsigned();
             $table->bigInteger('treeable_id')->unsigned();
-            $table->bigInteger('node_parent_id')->unsigned()->nullable();
+            // $table->bigInteger('node_parent_id')->unsigned()->nullable();
+            $table->foreignId('node_parent_id')->nullable()->references('node_id')
+                  ->on('tree_nodes')->onDelete('cascade');
             $table->enum('node_gender', ['m', 'f'])->default('m');
             $table->string('node_photo', 255)->nullable();         // Path to the avatar
             // $table->timestamps();
             
-            $table->foreignId('node_parent_id')->references('node_id')
-                  ->on('tree_nodes')->onDelete('cascade');
             $table->index('treeable_id');
             $table->unique('nodeable_id');
         });

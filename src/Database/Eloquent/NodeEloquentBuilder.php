@@ -2,7 +2,6 @@
 
 namespace Girover\Tree\Database\Eloquent;
 
-use Girover\Tree\Location;
 use Illuminate\Database\Eloquent\Builder;
 
 class NodeEloquentBuilder extends Builder
@@ -25,7 +24,7 @@ class NodeEloquentBuilder extends Builder
      */
     public function male()
     {
-        $this->where('gender', 'm');
+        $this->where(gender(), male());
 
         return $this;
     }
@@ -36,7 +35,7 @@ class NodeEloquentBuilder extends Builder
      */
     public function female()
     {
-        $this->where('gender', 'f');
+        $this->where(gender(), female());
 
         return $this;
     }
@@ -47,6 +46,14 @@ class NodeEloquentBuilder extends Builder
     public function root()
     {
         return $this->first();
+    }
+
+    /**
+     * 
+     */
+    public function parentId($parent_id)
+    {
+        return $this->where('node_parent_id', $parent_id);
     }
 
     /**

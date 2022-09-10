@@ -16,11 +16,9 @@ class TreeNodeFactory extends Factory
     {
         // $this->model =  ModelService::nodeModel();
         return [
-            'name'        => $this->faker->name(),
             'nodeable_id' => 1,
             'treeable_id' => 1,
-            'location'    => Location::firstPossibleSegment(),
-            'gender'      => $this->faker->randomElement(['m','f']),
+            'node_parent_id' => 1,
         ];
     }
 }

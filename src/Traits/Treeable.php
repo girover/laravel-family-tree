@@ -2,10 +2,12 @@
 
 namespace Girover\Tree\Traits;
 
+use Girover\Tree\Database\NodeQuerySql;
 use Girover\Tree\GlobalScopes\OrderByLocationScope;
 use Girover\Tree\Location;
 use Girover\Tree\Pointer;
 use Girover\Tree\Services\treeableService;
+use Illuminate\Support\Facades\DB;
 
 /**
  *  The model `Tree` has to use this trait
@@ -45,21 +47,6 @@ trait Treeable
         return $this->treeable_service ?? (new TreeableService($this));
     }
 
-    public static function bootTreeable()
-    {
-        
-    }
-
-    /**
-     * Every time an instance of \Girover\Tree\Models\Tree creates
-     * this method will be invoked
-     * @return void
-     */
-    public function initializeTreeable()
-    {
-        // $this->fillable = array_merge($this->fillable, static::$fillable_cols);
-    }
-
     /**
      * Tree has a pointer. create and make it free
      *
@@ -89,7 +76,7 @@ trait Treeable
      */
     public function isPointerFree()
     {
-        return $this->pointer()->location() === null ? true : false;
+        return $this->pointer()->node() === null ? true : false;
     }
 
     /**
@@ -99,7 +86,9 @@ trait Treeable
      */
     public function pointerToRoot()
     {
-        return $this->pointer()->to((nodeableModel())::tree($this->getKey())->first());
+        return $this->pointer()
+                    ->to((nodeableModel())::tree($this->getKey())
+                    ->whereNull('node_parent_id')->first());
     }
 
     /**
@@ -123,19 +112,6 @@ trait Treeable
     }
 
     /**
-     * Determine if the Tree has node with this given location
-     *
-     * @param string $location : location of node
-     * @return int [1, 0]
-     *
-     */
-    public function has($location)
-    {
-        return $this->nodesQuery()
-                    ->where('location', $location)->count();
-    }
-
-    /**
      * To unload this tree.
      *
      * @return void
@@ -153,7 +129,7 @@ trait Treeable
      */
     public function mainNode() // Should Removes
     {
-        return $this->nodesQuery()->where('location', $this->main_node)
+        return $this->nodesQuery()->where('node_id', $this->main_node)
                                     ->where($this->foreign_key, $this->getKey())
                                     ->first();
     }
@@ -166,11 +142,11 @@ trait Treeable
     public function setMainNode($node) // Should Removes
     {
         if ($node instanceof (nodeableModel())) {
-            $this->main_node = $node->location;
+            $this->main_node = $node->node_id;
             $this->save();
             return $node;
         }
-        $main_node = $this->nodesQuery()->where('location', $node)->first();
+        $main_node = $this->nodesQuery()->where('node_id', $node)->first();
 
         if ($main_node) {
             $this->main_node = $node;
@@ -181,25 +157,36 @@ trait Treeable
     }
 
     /**
-     * Get all Nodes in this Tree from database Table 'nodes'
+     * Get all Nodes of this Tree from database
+     * sorted by path of nodes
      *
      * @return \Illuminate\Database\Eloquent\Collection
      */
     public function getAllNodes()
     {
-        return $this->nodesQuery()->get();
+        // Eager loading the relations `wives`
+        return ((nodeableModel())::fromQuery(NodeQuerySql::treeNodesSortedByPathSql($this->getKey())))->load('wives');
     }
 
     /**
-     * Get All Nodes that are in specific generation depending on given number
+     * Get all nodes in this tree from the database
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function nodes()
+    {
+        return $this->getAllNodes();
+    }
+
+    /**
+     * We get All Nodes that are in specific generation depending on given number
      *
      * @param int $generation
      * @return \Illuminate\Database\Eloquent\Collection
      */
     public function nodesOfGeneration($generation = 1)
     {
-        return $this->nodesQuery()->locationREGEXP(Location::singleGenerationREGEXP($generation))
-                    ->get();
+        return ((nodeableModel())::fromQuery(NodeQuerySql::treeGenerationNodes($this->getKey(), $generation)))->load('wives');
     }
 
     /**
@@ -208,7 +195,7 @@ trait Treeable
      */
     public function root()
     {
-        return $this->nodesQuery()->first(); 
+        return $this->nodesQuery()->whereNull('node_parent_id')->first(); 
     }
 
     /**
@@ -245,25 +232,18 @@ trait Treeable
     }
 
     /**
-     * Get all nodes in this tree from the database
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
-    public function nodes()
-    {
-        return $this->nodesQuery()->get();
-    }
-
-    /**
      * To count the nodes in this tree by querying database
      *
      * @return int
      */
-    protected function countDatabaseNodes()
+    public function countNodesFromPointer()
     {
-        return $this->nodesQuery()
-                    ->where('location', 'like', $this->pointer()->location().'%')
-                    ->count();
+        // if pointer is free, move it to the root
+        if ($this->isPointerFree()) {
+            $this->pointerTo($this->root());
+        }
+        
+        return DB::select(NodeQuerySql::subtreeCountNodes($this->pointer()->node()))[0]->total_nodes;
     }
 
     /**
@@ -273,51 +253,39 @@ trait Treeable
      */
     public function countGenerations()
     {
-        $node = $this->nodesQuery()
-                     ->withoutGlobalScope(OrderByLocationScope::class)
-                     ->orderByRaw('LENGTH(location) DESC')->first();
-
-        if (null !== $node) {
-            return Location::generation($node->location);
-        }
-
-        return 0;
+        return DB::select(NodeQuerySql::treeCountGenerations($this->getKey()))[0]->total_generations;
     }
 
     /**
-     * Move the pointer of the tree to a given node or location
+     * Move the pointer of the tree to a given node
      *
-     * @param \Illuminate\Database\Eloquent\Model|string $location
+     * @param \Illuminate\Database\Eloquent\Model
      * @return \Girover\Tree\Pointer
      */
-    public function pointerTo($location)
+    public function pointerTo($nodeable)
     {
-        return $this->pointer()->to($location);
-
-        // return $this;
+        return $this->pointer()->to($nodeable);
     }
+
     /**
-     * Move the pointer of the tree to a given node or location
+     * Move the pointer of the tree to a given node
      *
-     * @param \Illuminate\Database\Eloquent\Model|string $location
+     * @param \Illuminate\Database\Eloquent\Model
      * @return $this
      */
-    public function goTo($location)
+    public function goTo($nodeable)
     {
-        return $this->pointerTo($location);
+        return $this->pointerTo($nodeable);
     }
 
     /**
-     * Get nodes who have the longest location in the tree
      * Get the newest generation members in the tree
      *
      * @return \Illuminate\Database\Eloquent\Collection
      */
-    public function nodesOnTop()
+    public function leafNodes()
     {
-        return $this->nodesQuery()
-                    ->withoutGlobalScope(OrderByLocationScope::class)
-                    ->orderByRaw('LENGTH(location) DESC')->get();
+        return ((nodeableModel())::fromQuery(NodeQuerySql::treeLeafNodes($this->getKey())))->load('wives');
     }
 
     /**
@@ -327,7 +295,7 @@ trait Treeable
      */
     public function toTree()
     {
-        return $this->draw();
+        return $this->build();
     }
 
     /**
@@ -337,7 +305,17 @@ trait Treeable
      */
     public function toHtml()
     {
-        return $this->draw();
+        return $this->build();
+    }
+
+    /**
+     * rendering the current tree as HTML string.
+     *
+     * @return string
+     */
+    public function render()
+    {
+        return $this->build();
     }
 
     /**
@@ -345,7 +323,7 @@ trait Treeable
      *
      * @return string
      */
-    public function draw()
+    public function build()
     {
         return $this->treeableService()->buildTree();
     }

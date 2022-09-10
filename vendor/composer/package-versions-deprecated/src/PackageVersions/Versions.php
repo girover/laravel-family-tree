@@ -160,7 +160,7 @@ final class Versions
   'zbateson/mail-mime-parser' => '2.2.1@24955de7ec352b3258c1d4551efd21202cb8710c',
   'zbateson/mb-wrapper' => '1.1.2@5d9d190ef18ce6d424e3ac6f5ebe13901f92b74a',
   'zbateson/stream-decorators' => '1.0.6@3403c4323bd1cd15fe54348b031b26b064c706af',
-  'girover/tree' => '1.0.0+no-version-set@',
+  'girover/tree' => 'dev-main@551853994a977e9471fc77f3263c097466acd64a',
 );
 
     private function __construct()

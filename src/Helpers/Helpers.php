@@ -29,7 +29,13 @@ if (! function_exists('treeableModel')) {
 if (! function_exists('nodeableTable')) {
     function nodeableTable()
     {
-        return (new (config('tree.nodeable_model')))->getTable();
+        static $nodeable_table_name = null;
+
+        if ($nodeable_table_name === null) {
+
+            $nodeable_table_name =  (new (config('tree.nodeable_model')))->getTable();
+        }
+        return $nodeable_table_name;
     }
 }
 
@@ -39,7 +45,56 @@ if (! function_exists('nodeableTable')) {
 if (! function_exists('treeableTable')) {
     function treeableTable()
     {
-        return (new (config('tree.treeable_model')))->getTable();
+        static $treeable_table_name = null;
+
+        if ($treeable_table_name === null) {
+
+            $treeable_table_name =  (new (config('tree.treeable_model')))->getTable();
+        }
+        return $treeable_table_name;
+    }
+}
+
+/**
+ * Function for getting the gender column name in nodeable table
+ */
+if (! function_exists('gender')) {
+    function gender()
+    {
+        return config('tree.gender.column');
+    }
+}
+
+/**
+ * Function for getting the the case of gender column that represents male node
+ */
+if (! function_exists('male')) {
+    function male()
+    {
+        return config('tree.gender.male');
+    }
+}
+
+/**
+ * Function for getting the the case of gender column that represents female node
+ */
+if (! function_exists('female')) {
+    function female()
+    {
+        return config('tree.gender.female');
+    }
+}
+
+/**
+ * Function for getting the the case of gender column that represents female node
+ */
+if (! function_exists('sortColumn')) {
+    /**
+     * @return string
+     */
+    function sortColumn()
+    {
+        return config('tree.children_order_by');
     }
 }
 

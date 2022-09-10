@@ -44,7 +44,7 @@ class TreeableService
     /**
      * Creating root for an empty tree
      * 
-     * @param array| \Illuminate\Database\Eloquent\Model
+     * @param array|\Illuminate\Database\Eloquent\Model
      * 
      * @return bool
      * 
@@ -63,13 +63,11 @@ class TreeableService
         if (!$this->treeable->isEmptyTree()) {
             throw new TreeException("Root for tree is already exists", 1);
         }
-
-        $location = Location::generateRootLocation();
         
         $empty_nodeable = new (nodeableModel());
         $empty_nodeable->treeable_id = $this->treeable->getKey();
 
-        return $this->nodeableService($empty_nodeable)->createNewNode($data, $location,'m');
+        return $this->nodeableService($empty_nodeable)->createNewNode($data, null, male());
     }
 
 
@@ -86,6 +84,6 @@ class TreeableService
             $tree_generator = new HtmlTreeBuilder($this->treeable);
         }
 
-        return $tree_generator->draw();
+        return $tree_generator->build();
     }
 }

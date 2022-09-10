@@ -1,0 +1,732 @@
+@charset "utf-8";
+/* CSS Document */
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+.tree {
+    --node-width: 50px;
+    --node-height: 70px;
+    --node-margin: 10px;
+    --node-padding: 0px;
+    --node-background-color: #F3F3F3;
+    --node-border-color: #C2C1BD;
+    --node-border-width: 1px;
+    --node-border-style: solid;
+    --line-male-color: #1f99cc;
+    --line-female-color: #f700ff;
+    --line-color: #1f99cc;
+    --line-width: 2px;
+    --line-style: solid;
+    --circle-husband-color: #da0146;
+    --circle-children-color: #1f99cc;
+    --circle-child-color: #1f99cc;
+    --length-from-node-to-line: 15px;
+    --male-color: #1f99cc;
+    --female-color: #F09;
+    --font-size: 10px;
+    --node-img-margin: 3px;
+    --z-index-start: 10;
+}
+
+.tree {
+    display: flex;
+    flex-wrap: nowrap;
+    margin: 5px;
+    padding: 5px 5px 50px 5px;
+    border: 0px solid #000;
+    width: auto;
+    margin-top: 40px;
+    margin-left: 10px;
+    text-align: center;
+}
+
+.tree ul {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    position: relative;
+    vertical-align: text-top;
+}
+
+.tree li {
+    display: flex;
+    flex-direction: column;
+    vertical-align: top;
+    text-align: center;
+    list-style-type: none;
+    position: relative;
+}
+
+.tree .parent {
+    display: flex;
+    justify-content: center;
+}
+
+.tree li:only-child {
+    padding-top: 0;
+}
+
+.tree li a.node {
+    position: relative;
+    background-color: var(--node-background-color);
+    border: var(--node-border-width) var(--node-border-style) var(--node-border-color);
+    text-decoration: none;
+    font-family: arial, verdana, tahoma;
+    font-size: var(--font-size);
+    font-weight: bold;
+    margin: var(--node-margin);
+    display: inline-block;
+    box-shadow: 2px 2px 5px -1px #989c9e;
+    transition: background 0.6s;
+}
+
+.male-node,
+.female-node,
+.wife-node,
+.wife,
+.child,
+.husband {
+    width: var(--node-width);
+    height: var(--node-height);
+}
+
+.male-node,
+.female-node,
+.wife-node {
+    display: inline-block;
+    position: relative;
+    border-radius: 15px;
+    text-align: center;
+    transition: background 0.5s;
+}
+
+.female-node .name {
+    color: var(--female-color);
+}
+
+/* .wife-node{
+    position:absolute;
+    top:0px;
+    left:100%;
+    padding:2px;
+    border-radius:15%;
+} */
+.node-img {
+    display: inline-block;
+    position: relative;
+    width: 45px;
+    height: 45px;
+    margin: var(--node-img-margin);
+}
+
+.node-info-wrapper::before {
+    content: '';
+    position: absolute;
+    top: calc(0px - var(--node-margin) - var(--node-img-margin));
+    left: calc(50% - 4px);
+    width: 6px;
+    height: 6px;
+    background: #edf2f7;
+    border-radius: 50%;
+    border: 1px solid var(--line-color);
+    z-index: calc(var(--z-index-start) + 10);
+}
+.node-info {
+    
+}
+.male-node .node-info:hover,
+.female-node:not(.empty) .node-info:hover {
+    width: 100%;
+    height: 100%;
+    transform: scale(2.2);
+    transition: all 0.7s;
+    position: relative;
+    z-index: calc(var(--z-index-start) + 13);
+    box-shadow: 0px 0px 6px 0px #191717bd;
+    border-radius: 4px;
+}
+
+.female-node:not(.empty) .node-info:hover {
+    background: #fee2ff;
+    box-shadow: 0px 0px 6px 0px #d200d2;
+}
+
+.male-node .node-info:hover {
+    background: #e2f6ff;
+    box-shadow: 0px 0px 6px 0px #00b4ff;
+}
+
+/* first node in the tree */
+.tree>ul>li>.parent .node-info-wrapper::before {
+    display: none;
+}
+
+.wives-group .node-info-wrapper::before {
+    display: none;
+}
+
+.node-img img {
+
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    border: 0px solid #666;
+    background-color: #CCC;
+}
+
+.wife-node .node-img img {
+    width: 45px;
+    height: 45px;
+    border-radius: 0px;
+    border: 0px solid #666;
+    box-shadow: 1px 1px 2px #333;
+}
+
+.name {
+    color: #018cc5;
+    font-weight: bold;
+}
+
+
+
+/*.tree li  .parent >  a, .tree li >  a, .tree .wives-group > a:first-child{*/
+
+.tree .parent>a::before,
+.tree .parent>a::after,
+.tree li>a::before,
+.tree li>a::after {
+    content: '';
+    position: absolute;
+    width: calc(50% + var(--node-margin) + 3px);
+    height: var(--node-margin);
+    top: calc(0px - var(--node-margin) - 1px);
+}
+
+.tree .parent>a::before,
+.tree li>a::before {
+    border-top: 2px solid #09C;
+    right: 50%;
+}
+
+.tree a::after {
+    border-top: 2px solid #09C;
+    left: calc(50% - 2px);
+}
+
+.tree .parent::before,
+.tree .parent::after {
+    content: '';
+    position: absolute;
+    top: 0px;
+    border-top: 2px solid #09C;
+}
+
+.tree .parent::before {
+    right: 0px;
+    width: 50%;
+}
+
+.tree .parent::after {
+    left: -5px;
+    width: calc(50% - (var(--node-width)/2) - var(--node-margin) - 1px);
+}
+
+.tree li:only-child>.parent::before,
+.tree li:first-child>.parent::after,
+.tree li:last-child>a::after,
+.tree li:last-child>.parent::before,
+.tree li:last-child>.parent a::after,
+.tree li:first-child>a::before,
+.tree .parent a:last-child::before,
+.husband.no-children::before,
+.child .male-node::after {
+    display: none;
+}
+
+.tree li:last-child>.parent>a:first-child::before {
+    display: block !important;
+    border-right: 2px solid #09C;
+}
+
+.tree li:first-child>.parent>a:first-child::before {
+    display: none !important;
+}
+
+.tree li:first-child .parent>a:first-child::after {
+    border-left: 2px solid #09C;
+}
+
+.tree li ul li:only-child>.parent a:first-child::after {
+    display: block !important;
+    width: calc(50% + var(--node-margin));
+}
+
+.tree li a:hover,
+.tree li a:hover+ul li a {
+    background: skyblue;
+    color: #000;
+    border: 1px solid #033;
+    cursor: pointer;
+}
+
+@keyframes shadowAnimation {
+    0% {
+        box-shadow: 0px 0px 50px 5px #3CF;
+    }
+
+    35% {
+        box-shadow: 0px 0px 30px 4px #3CF;
+    }
+
+    80% {
+        box-shadow: 0px 0px 10px 4px #3CF;
+    }
+
+    100% {
+        box-shadow: 0px 0px 2px 2px #3CF;
+    }
+}
+
+.active-node {
+    background: #f5f5f5 !important;
+    border: 1px solid #000 !important;
+    position: relative;
+    box-shadow: 0px 0px 7px 1px #fd0606;
+    animation: shadowAnimation 2s linear;
+}
+
+.tree li a:hover+ul li::after,
+.tree li a:hover+ul li::before,
+.tree li a:hover+ul::before,
+.tree li a:hover+ul ul::before {
+    border-color: #39F;
+}
+
+.husband {
+    position: relative;
+    display: inline-block;
+}
+
+.husband::before {
+    content: '';
+    width: 0px;
+    border: 1px solid #09C;
+    position: absolute;
+    top: calc(50% - 3px);
+    left: calc(100% + var(--node-margin) - 1px);
+    height: calc(50% + var(--node-margin) + 3px);
+}
+
+.husband::after {
+    content: '';
+    height: 0;
+    width: calc(var(--node-margin) + 1px);
+    border: 1px solid #3CF;
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 1px);
+}
+
+.wives-group {
+    display: inline-block;
+    position: relative;
+    margin-left: 0px;
+}
+
+.wives-group>a {
+    position: absolute;
+}
+
+.wives-group .node.empty {
+    background: #fafafa;
+    border: 1px dashed #ccc;
+    box-shadow: none;
+    border-radius: 10px;
+}
+
+.wives-group .node.empty:hover {
+    background: #ff008414;
+    border: 1px dashed #ff008456;
+}
+
+.wives-group a:first-child {
+    position: relative !important;
+    z-index: calc(var(--z-index-start) - 1);
+}
+
+.wives-group a:nth-child(n+2) {
+    position: absolute !important;
+    background-color: #9DCEFF;
+    border: 1px solid #09F;
+    border-radius: 0px;
+    transition: top 0.5s, left 0.5s;
+}
+
+.wives-group a:nth-child(2) {
+    top: 3px;
+    left: 3px;
+    z-index: calc(var(--z-index-start) - 2);
+}
+
+.wives-group a:nth-child(3) {
+    top: 6px;
+    left: 6px;
+    z-index: calc(var(--z-index-start) - 3);
+}
+
+.wives-group a:nth-child(4) {
+    top: 9px;
+    left: 9px;
+    z-index: calc(var(--z-index-start) - 4);
+}
+
+.wives-group a:nth-child(5) {
+    top: 12px;
+    left: 12px;
+    z-index: calc(var(--z-index-start) - 5);
+}
+
+.wives-group a:nth-child(6) {
+    top: 15px;
+    left: 15px;
+    z-index: calc(var(--z-index-start) - 6);
+}
+
+.wives-group a:nth-child(7) {
+    top: 18px;
+    left: 18px;
+    z-index: calc(var(--z-index-start) - 7);
+}
+
+.wives-group a:nth-child(8) {
+    top: 21px;
+    left: 21px;
+    z-index: calc(var(--z-index-start) - 8);
+}
+
+.wives-group a:nth-child(9) {
+    top: 24px;
+    left: 24px;
+    z-index: calc(var(--z-index-start) - 9);
+}
+
+.wives-group a:nth-child(10) {
+    top: 27px;
+    left: 27px;
+    z-index: calc(var(--z-index-start) - 10);
+}
+
+.wives-group:hover a:hover {
+    z-index: calc(var(--z-index-start) + 14) !important;
+}
+
+.wives-group:hover a.node {
+    top: 0px;
+    z-index: calc(var(--z-index-start) + 12);
+}
+
+.wives-group:hover a:nth-child(2) {
+    left: calc(var(--node-width) + 1px);
+}
+
+.wives-group:hover a:nth-child(3) {
+    left: calc((2 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(4) {
+    left: calc((3 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(5) {
+    left: calc((4 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(6) {
+    left: calc((5 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(7) {
+    left: calc((6 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(8) {
+    left: calc((7 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(9) {
+    left: calc((8 * var(--node-width)) + 1px);
+}
+
+.wives-group:hover a:nth-child(10) {
+    left: calc((9 * var(--node-width)) + 1px);
+}
+
+/* .wives-group:hover .wife-2::after */
+.wives-group:hover a:nth-child(2) .female-node::after {
+    content: '';
+    position: absolute;
+    top: calc(0px - (var(--node-margin)/2));
+    left: calc(0px - var(--node-width) - var(--node-margin) - 3px);
+    width: calc(var(--node-width) + var(--node-margin) + (var(--node-width)/2) + 4px);
+    height: calc((var(--node-margin)/2));
+    border-top: 2px solid #f0f;
+    border-right: 2px solid #f0f;
+
+}
+
+/* .wives-group:hover .wife-2::before */
+.wives-group:hover a:nth-child(2) .female-node::before {
+    content: '';
+    position: absolute;
+    border-left: 2px solid var(--line-female-color);
+    top: calc(0px - (var(--node-margin)/2));
+    left: calc(0px - var(--node-width) - var(--node-margin) - 3px);
+    height: calc(50% + (var(--node-margin)/2) - 3px);
+    width: 0px;
+    transition: all 0.6s ease-out;
+}
+
+.wives-group:hover a:nth-child(n+3) .female-node::before {
+    display: none;
+}
+
+.wives-group:hover a:nth-child(n+3) .female-node::after {
+    content: '';
+    position: absolute;
+    top: calc(0px - (var(--node-margin)/2));
+    left: -50%;
+    width: 70px;
+    height: calc((var(--node-margin)/2));
+    border-top: 2px solid #f0f;
+    border-right: 2px solid #f0f;
+}
+
+.wife {
+    position: relative;
+}
+
+.wife::before {
+    content: '';
+    height: 0;
+    width: var(--node-margin) !important;
+    border: 1px solid #F0F !important;
+    position: absolute;
+    top: 50% !important;
+    left: calc(0px - var(--node-margin)) !important;
+}
+
+.child {
+    position: relative;
+}
+
+.child::before {
+    content: '';
+    position: absolute;
+    width: 0px;
+    height: calc(var(--node-margin) - 1px);
+    top: calc(0px - var(--node-margin));
+    border-right: 2px solid #09C;
+    right: calc(50%);
+}
+
+.parent:hover a,
+.parent:hover+ul a {
+    background-color: #DBF3FB;
+    border: 1px solid #09F;
+}
+
+.g::after {
+    content: '';
+    position: absolute;
+    width: 50%;
+    height: 0px;
+    top: 66px;
+    border-top: 2px solid #09C;
+    right: 0px;
+    z-index: calc(var(--z-index-start) - 2);
+}
+
+.wife-number {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 15px;
+    height: 15px;
+    background: #FF0;
+    text-align: center;
+    font-size: 11px;
+    border-radius: 50%;
+}
+
+.wives-group .female-node::before {
+    content: '';
+    position: absolute;
+    top: calc(50% + 1px);
+    left: calc(0px - var(--node-margin));
+    height: 0;
+    width: var(--node-margin);
+    border-top: 2px solid #f0f;
+}
+
+.wives-group .female-node::after {
+    content: '';
+    position: absolute;
+    top: calc(50% + 1px);
+    height: 0;
+    border-top: 2px solid #09c;
+}
+
+.wives-group a:first-child .female-node::after
+
+/* .wife::after */
+    {
+    width: 8px !important;
+    height: 8px !important;
+    background: #fff !important;
+    border-radius: 50% !important;
+    border: 2px solid var(--circle-husband-color) !important;
+    top: calc(50% - 3px) !important;
+    left: calc(0px - var(--node-margin) - 6px) !important;
+}
+
+/* Wife number 2 */
+.wives-group a:nth-child(2) .female-node::after {
+    width: calc((var(--node-margin)/2));
+    left: calc(0px - var(--node-margin) - 4px);
+    transition: all 0.3s ease-out;
+}
+
+/* Wife number 3 */
+.wives-group a:nth-child(3) .female-node::after {
+    width: calc((var(--node-margin)/2) + 3px);
+    left: calc(0px - var(--node-margin) - 7px);
+}
+
+/* Wife number 4 */
+.wives-group a:nth-child(4) .female-node::after {
+    width: calc((var(--node-margin)/2) + 6px);
+    left: calc(0px - var(--node-margin) - 10px);
+}
+
+/* Wife number 5 */
+.wives-group a:nth-child(5) .female-node::after {
+    width: calc((var(--node-margin)/2) + 9px);
+    left: calc(0px - var(--node-margin) - 13px);
+}
+
+/* Wife number 6 */
+.wives-group a:nth-child(6) .female-node::after {
+    width: 19px;
+    left: -32px;
+}
+
+/* Wife number 7 */
+.wives-group a:nth-child(7) .female-node::after {
+    width: 22px;
+    left: -35px;
+}
+
+/* Wife number 8 */
+.wives-group a:nth-child(8) .female-node::after {
+    width: 25px;
+    left: -38px;
+}
+
+/* Wife number 9 */
+.wives-group a:nth-child(9) .female-node::after {
+    width: 28px;
+    left: -41px;
+}
+
+/* Wife number 10 */
+.wives-group a:nth-child(10) .female-node::after {
+    width: 31px;
+    left: -44px;
+}
+
+.wife:hover a:nth-child(3) .female-node::after,
+.wife:hover a:nth-child(4) .female-node::after,
+.wife:hover a:nth-child(5) .female-node::after {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: -35px;
+    border-top: 2px solid #f0f;
+    border-right: 2px solid #f0f;
+    width: 70px;
+    height: 8px;
+}
+
+/*.wife:hover .wife-2::after{
+    content:'';
+    position:absolute;
+    top:-10px;
+    left:-90px;
+    border-top:2px solid #f0f;
+    border-right:2px solid #f0f;
+    width:130px;
+
+    height:8px;
+}*/
+/*.wife:hover .wife-2::before{
+    content:'';
+    position:absolute;
+    top:-10px;
+    left:-85px;
+    border-left:2px solid #f0f;
+    width:0px;
+    height:55px;
+    transition: all 0.6s ease-out;
+}*/
+/* .wife:hover .wife-3::before,
+.wife:hover .wife-4::before,
+.wife:hover .wife-5::before{
+    display:none;
+} */
+
+#add-father,
+#show-father {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    top: -45px;
+    left: 15px;
+    border: 2px solid #cccccc;
+    background: #f3f3f3;
+    border-radius: 50%;
+    padding-top: 8px;
+    font-size: 14px;
+    font-weight: bolder;
+    color: #cccccc;
+}
+
+#add-father:hover,
+#show-father:hover {
+    border: 2px solid #f3f3f3;
+    background: #cccccc;
+    color: #f3f3f3;
+}
+
+.node-collapse {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    bottom: calc(0px - var(--node-margin) - 10px);
+    left: calc(100% + var(--node-margin) - 7px);
+    border: 2px solid var(--circle-children-color);
+    background: #ffffff;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: bolder;
+    color: #3097d1;
+    z-index: calc(var(--z-index-start) + 11);
+}
+
+.node-collapse:hover {
+    border: 1px solid #1f99cc;
+    background: #1f99cc;
+    color: #ffffff;
+}

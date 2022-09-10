@@ -12,6 +12,4 @@ class Nodeable extends Model
     use NodeableTrait, HasFactory;
 
     protected $guarded = [];
-
-
 }

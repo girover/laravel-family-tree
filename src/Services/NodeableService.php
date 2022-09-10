@@ -45,7 +45,7 @@ class NodeableService
      */
     public function validateGender($gender)
     {
-        if ($gender !== 'm' && $gender !== 'f') {
+        if ($gender !== male() && $gender !== female()) {
             throw new TreeException("Invalid gender is provided", 1);            
         }
     }
@@ -61,18 +61,22 @@ class NodeableService
      * @throws \Girover\Tree\Exceptions\TreeException
      * @return \Illuminate\Database\Eloquent\Model
      */
-    public function createNewNode($data, $location, $gender = 'm')
+    public function createNewNode($data, $node_parent_id, $gender = null)
     {
-        Location::validate($location);
+        $gender = ($gender == '') ? male() : $gender;
 
         $this->validateGender($gender);
 
         try {
             DB::beginTransaction();
 
-            $nodeable = $this->createNodeable($data) ?? throw new TreeException("Failed to insert data", 1);
+            $nodeable = $this->createNodeable($data, $gender);
             
-            $node     = $this->createNode(['nodeable_id'=>$nodeable->getKey(), 'treeable_id'=>$this->nodeable->treeable_id, 'location'=>$location, 'gender'=>$gender]);
+            $node     = $this->createNode([
+                                'nodeable_id'=>$nodeable->getKey(), 
+                                'treeable_id'=>$this->nodeable->treeable_id, 
+                                'node_parent_id'=>$node_parent_id
+                            ]);
 
             // if(!$nodeable || !$node){
             if(!$node){
@@ -97,16 +101,24 @@ class NodeableService
         }
     }
 
-    // NEW
-    public function createNodeable($data)
+    /**
+     * Creating new nodeable if not exists
+     * If exists then return it
+     * 
+     * @param \Illuminate\Database\Eloquent\Mode|null
+     * @return \Illuminate\Database\Eloquent\Mode
+     * @throws \Girover\Tree\Exceptions\TreeException
+     */
+    public function createNodeable($data, $gender)
     {
         if ($data instanceof (nodeableModel())) {
 
-            // $data is a model and exists in database
+            // $data is a model and already exists in database
             if ($data->exists){
                 return $data;
             }
 
+            $data->{gender()} = $gender;
             $data->save();
 
             return $data;
@@ -119,6 +131,9 @@ class NodeableService
         if (empty($data)) {
             throw new TreeException("No data are provided for creating the nodeable", 1);
         }
+
+        $data[gender()] = $gender;
+
         return (nodeableModel())::create($data);
     }
 
@@ -138,7 +153,6 @@ class NodeableService
      * Create father for the root node in the tree
      *
      * @param \Illuminate\Database\Eloquent\Model $root data for the new father
-     * @param array $data data for the new father
      * 
      * @return mixed
      */
@@ -148,28 +162,12 @@ class NodeableService
             throw new TreeException("Error: Can't make father for node:[ ".$this->nodeable->location." ]. node should be root to make father for it.", 1);
         }
 
-        DB::beginTransaction();
+        $new_root = $this->createNewNode($data, null, male());
 
-        try {
-            // update all nodes locations in this tree.
-            // Firstly prepend all locations with separator '.'
-            // to prevent duplicated locations in same tree
-            DB::update($this->prependLocationsWithSeparatorSql(), [$this->nodeable->treeable_id]);
-            // then prepend all locations with 'aaa'
-            DB::update($this->prependLocationsWithFirstPossibleSegmentSql(), [$this->nodeable->treeable_id]);
+        $this->nodeable->node_parent_id = $new_root->node_id;
+        $this->nodeable->save();
 
-            // create th new root node with given data
-            $new_root = $this->createNewNode($data, Location::firstPossibleSegment(), 'm');
-
-            DB::commit();
-
-            return $new_root;
-        } catch (\Throwable $th) {
-            // Rollback the database changes
-            DB::rollBack();
-
-            throw new TreeException("Error: ".$th->getMessage(), 1);
-        }
+        return $new_root;
     }
 
     /**
@@ -179,37 +177,9 @@ class NodeableService
      * @param string $gender 'm'|'f'
      * @return \Illuminate\Database\Eloquent\Model|null
      */
-    public function newChild($data, $gender = 'm')
+    public function newChild($data, $gender = '')
     {
-        $new_child_location = $this->newChildLocation();
-
-        return $this->createNewNode($data, $new_child_location, $gender);
-    }
-
-    /**
-     * Generating location for new child for this node.
-     * 
-     * @return string
-     */
-    protected function newChildLocation()
-    { 
-        return $this->newChildLocationFor($this->nodeable);
-        // return ($last_child = $this->nodeable->lastChild())
-        //        ? Location::generateNextLocation($last_child->location)
-        //        : Location::firstChild($this->nodeable->location);
-    }
-
-    /**
-     * Generating location for new child for this node.
-     * 
-     * @param \Illuminate\Database\Eloquent\Model
-     * @return string
-     */
-    protected function newChildLocationFor($node)
-    {  
-        return ($last_child = $node->lastChild())
-               ? Location::generateNextLocation($last_child->location)
-               : Location::firstChild($node->location);    
+        return $this->createNewNode($data, $this->nodeable->node_id, $gender);
     }
 
     /**
@@ -220,21 +190,13 @@ class NodeableService
      * @param string gender of the new sibling
      * @return \Illuminate\Database\Eloquent\Model|null
      */
-    public function newSibling($data, $gender = 'm')
+    public function newSibling($data, $gender = '')
     {
         if ($this->nodeable->isRoot()) {
             throw new TreeException("Cannot add sibling to the Root of the tree.", 1);
         }
 
-        if ($this->nodeable->hasSiblings()) {
-            $new_sibling_location = Location::generateNextLocation($this->nodeable->lastSibling()->location);
-        } else {
-            $new_sibling_location = Location::generateNextLocation($this->nodeable->location);
-        }
-
-        Location::validate($new_sibling_location);
-
-        return $this->createNewNode($data, $new_sibling_location, $gender);
+        return $this->createNewNode($data, $this->nodeable->node_parent_id, $gender);
     }
 
     /**
@@ -290,7 +252,7 @@ class NodeableService
         if ($this->nodeable->isMale()) {
 
             if ($wife->isMale()) {
-                throw new TreeException("Man Can not be married with a man", 1);
+                return false;
             }
 
             return (bool)$this->nodeable->wives()->where('marriages.nodeable_wife_id', $wife->getKey())
@@ -319,6 +281,16 @@ class NodeableService
     }
 
     /**
+     * Check if two nodeables belong the same tree
+     * 
+     * @return bool
+     */
+    public function areFromSameTree($nodeable1, $nodeable2)
+    {
+        return $nodeable1->treeable_id === $nodeable2->treeable_id ? true : false;
+    }
+
+    /**
      * To build a tree as Html from specific node
      * 
      * @return string html representing the tree starting from a node
@@ -333,46 +305,19 @@ class NodeableService
         
         $tree->pointer()->to($this->nodeable);
 
-        return $tree->draw();
+        return $tree->build();
     }
 
     /**
-     * Move the node with its children
-     * to be child of the given location
-     * Both nodes should belong to same tree
+     * Make a node as child of another node
+     * They should belong the same tree
      *
      * @param \Illuminate\Database\Eloquent\Model $node
      * @return \Illuminate\Database\Eloquent\Model
      * @throws \Girover\Tree\Exceptions\TreeException
      */
-    protected function makeAsChildOf($node)
+    public function makeAsChildOf($nodeable)
     {
-        // Generate new location for this node
-        $new_location = $this->newChildLocationFor($node);
-
-        // Update locations of this node and its children in database
-        $this->nodeable->updateLocation($new_location);
-        // $this->updateLocation($new_location);
-
-        $this->nodeable->location = $new_location;
-
-        return $this->nodeable;
-    }
-
-        /**
-     * Move the node with its children
-     * to be child of the given location
-     * Both nodes should belong to same tree
-     *
-     * @param \Illuminate\Database\Eloquent\Model|string $location: location or node to move node to it
-     * 
-     * @return \Illuminate\Database\Eloquent\Model
-     * @throws \Girover\Tree\Exceptions\TreeException
-     */
-    public function moveTo($location)
-    { 
-        $nodeable = $this->getNodeOrThrowException($location);
-        // Not allowed to add children to female nodes.
         if ($nodeable->isFemale()) {
             throw new TreeException("Error: Not allowed to add children to female nodes.", 1);
         }
@@ -382,80 +327,39 @@ class NodeableService
         }
         // Not allowed to move a node to its father.
         if ($nodeable->isFatherOf($this->nodeable)) {
-            throw new TreeException("Error: Not allowed to move a node to its father.", 1);
+            throw new TreeException("The nodeable is already child of the target nodeable.", 1);
         }
 
-        return $this->makeAsChildOf($nodeable);
-    }
+        $this->nodeable->node_parent_id = $nodeable->node_id;
+        $this->nodeable->save();
 
+        return $this->nodeable;
+    }
 
     /**
      * Move all children of the node to be children of
      * the given node or the node that has the given location.
      *
-     * @param \Illuminate\Database\Eloquent\Model|string $location
+     * @param \Illuminate\Database\Eloquent\Model
      * @return \Illuminate\Database\Eloquent\Model
      */
-    public function moveChildrenTo($location = null)
+    public function moveChildrenTo($nodeable)
     {
-        $node = $this->getNodeOrThrowException($location);
-
         // Not allowed to add children to female nodes.
-        if ($node->isFemale()) {
+        if ($nodeable->isFemale()) {
             throw new TreeException("Error: Not allowed to add children to female nodes.", 1);
         }
         // Not allowed to move children from an ancestor to a descendant.
-        if ($this->nodeable->isAncestorOf($node)) {
+        if ($this->nodeable->isAncestorOf($nodeable)) {
             throw new TreeException("Error: Not allowed to move children from an ancestor to a descendant.", 1);
         }
         
         $children = $this->nodeable->children();
         
-        DB::beginTransaction();
-        try {
-            foreach ($children as $child) {
-                $child->moveTo($location);
-            }
-            DB::commit();
-        } catch (\Throwable $th) {
-            DB::rollBack();            
-            throw new TreeException($th->getMessage(), 1);            
-        }
+        TreeNode::whereIn('node_id', $children->pluck('node_id')->toArray())
+                ->update(['node_parent_id'=>$nodeable->node_id]);
 
         return $this;
-    }
-
-    /**
-     * To get a node from a location
-     * Or to check if the given parameter is a node then return it
-     * 
-     * @param \Illuminate\Database\Eloquent\Model|string $location
-     * @return \Illuminate\Database\Eloquent\Model
-     * @throws \Girover\Tree\Exceptions\TreeException
-     */
-    protected function getNodeOrThrowException($location)
-    {
-        if ($location instanceof (nodeableModel())) {
-            return $location;
-        }
-
-        return  (nodeableModel())::tree($this->nodeable->treeable_id)->location($location)->first()
-                ?? throw new TreeException("Error: The location `".$location."` not found in this tree.", 1);
-    }
-
-    /**
-     * Sql UPDATE statement to add SEPARATOR '.'
-     * to the beginning of all locations in the given tree
-     *
-     * @param int $tree_id
-     * @return string sql statement
-     */
-    public function prependLocationsWithSeparatorSql()
-    {
-        // return 'UPDATE '. static::table() .
-        return ' UPDATE `tree_nodes` '.
-               ' SET `location` = CONCAT("'.Location::SEPARATOR.'", `location`)'.
-               ' WHERE treeable_id = ? ';
     }
 
     /**
@@ -467,71 +371,7 @@ class NodeableService
      */
     public function detachFromTree()
     {
-        return DB::delete($this->deleteNodeWithChildrenSql());
+        return TreeNode::where('node_id', $this->node_id)->delete();
     }
 
-    /**
-     * Sql UPDATE statement to add first possible segment
-     * 'aaa'|'000' to the beginning of all locations in the given tree
-     * NOTE: this method doesn't add '.' to the segment
-     *
-     * @param int $tree_id
-     * @return string sql statement
-     */
-    public function prependLocationsWithFirstPossibleSegmentSql()
-    {
-        return ' UPDATE `tree_nodes`' .
-               ' SET `location` = CONCAT("'.Location::firstPossibleSegment().'", `location`)'.
-               ' WHERE treeable_id = ? ';
-    }
-
-    /**
-     * Sql statement for updating location column in the tree_nodes table.
-     * Find all locations that start with $old_location
-     * and concat them with $new_location to beginning of old location.
-     *
-     * Note: when changing location so all descendants that are
-     * connected under this location have to be changed too.
-     *
-     * @example replace 'aa.ff' with 'bb.ss'
-     *
-     *          UPDATE `tree_nodes`
-     *          SET `location` = CONCAT('bb.ss', SUBSTRING(`location`, FROM 6))
-     *          WHERE `tree_id` = 2
-     *          AND `location` like 'aa.ff%' ;
-     * @param string $new_location
-     * @return string
-     */
-    public function updateLocationsSql($new_location)
-    {
-        return " UPDATE `tree_nodes` 
-                SET `location` = CONCAT('".$new_location."', SUBSTRING(`location` FROM ".(strlen($this->nodeable->location) + 1).")) 
-                WHERE `treeable_id` = ".$this->nodeable->treeable_id." 
-                AND `location` like '".$this->nodeable->location."%' ";
-    }
-
-    /**
-     * To delete nodes with its children from database
-     *
-     * @param int $tree_id
-     * @param int $location
-     * @return string
-     */
-    public function deleteNodeWithChildrenSql()
-    {
-        return " DELETE FROM `tree_nodes`   
-                WHERE `treeable_id` = ".$this->nodeable->treeable_id." 
-                AND `location` like '".$this->nodeable->location."%' ";
-    }
-
-    /**
-     * Updating the location of the node
-     * this will update location for all the node's descendants too.
-     * 
-     * @return int
-     */
-    public function updateLocation($new_location)
-    {
-        return DB::update($this->updateLocationsSql($new_location));
-    }
 }

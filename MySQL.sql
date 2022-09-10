@@ -1,32 +1,28 @@
 --------------------------------------------------------------------------------------------------
   -- SQl Query for Getting all nodes in a tree sorted by path
 --------------------------------------------------------------------------------------------------
-WITH RECURSIVE 
- -- get nodes and nodeables with children number partitioned by parent_id and ordered by birth date
 nodes_with_child_number AS (
- SELECT *, ROW_NUMBER() OVER (PARTITION BY nodes.parent_id ORDER BY nodeables.b_date ASC) AS child_number 
- FROM nodeables join nodes 
- on nodes.nodeable_id = nodeables.id where nodes.tree_id=1
+ SELECT *, ROW_NUMBER() OVER (PARTITION BY tree_nodes.node_parent_id ORDER BY people.b_date ASC) AS child_number 
+ FROM people join tree_nodes 
+ on tree_nodes.nodeable_id = people.id where tree_nodes.treeable_id=1
 )
 , 
 cte_recursion  AS 
 ( 
-  -- Initial Block : Get the root node that has parent_id as null
   SELECT CAST(CONCAT(LPAD(nodes_with_child_number.child_number, 2, '0')) AS char(2000)) AS path
     , 1 AS generation
     , nodes_with_child_number.*
   FROM nodes_with_child_number 
-  WHERE nodes_with_child_number.parent_id is null
+  WHERE nodes_with_child_number.node_parent_id is null
   
   UNION ALL
-  -- Recursive Block
+
      SELECT CONCAT(cte_recursion.path, '.', LPAD(nodes_with_child_number.child_number, 2, '0')) AS path
       , generation+1
       , nodes_with_child_number.*
      FROM nodes_with_child_number
-     INNER JOIN cte_recursion ON (nodes_with_child_number.parent_id  = cte_recursion.node_id)
+     INNER JOIN cte_recursion ON (nodes_with_child_number.node_parent_id  = cte_recursion.node_id)
 )
-
 -- Get tree nodes sorted by path
 SELECT * FROM cte_recursion
 ORDER BY path ASC;
@@ -58,24 +54,40 @@ on nodes.nodeable_id = nodeables.id
 where parent_id = [$node->parent_id] and nodeable_id <> [$node->nodeable_id]
 
 --------------------------------------------------------------------------------------------------
- -- Get all nodes from a node to the root
- with recursive
-nodeables_with_nodes as (
-	select * from nodes join nodeables
-    on nodes.nodeable_id = nodeables.id
-    where tree_id = $node->tree_id
+ -- Get all nodes from a node to the root on the same path
+WITH recursive
+nodeables_with_nodes AS (
+	SELECT * FROM people JOIN tree_nodes
+    ON tree_nodes.nodeable_id = people.id
+    WHERE treeable_id = 1
 )
 , 
-nodes_to_root as(
-   select *, 0 as depth from nodeables_with_nodes
-	where nodeable_id = $node->id
+nodes_to_root AS(
+   SELECT *, 0 as depth FROM nodeables_with_nodes
+	WHERE nodeable_id = 8
 	
 	UNION ALL
 	
-	select nodeables_with_nodes.*,nodes_to_root.depth+1 from nodeables_with_nodes join nodes_to_root
-	on nodeables_with_nodes.node_id = nodes_to_root.parent_id
+	SELECT nodeables_with_nodes.*,nodes_to_root.depth+1 FROM nodeables_with_nodes JOIN nodes_to_root
+	ON nodeables_with_nodes.node_id = nodes_to_root.node_parent_id
 )
-select * from nodes_to_root
+SELECT * FROM nodes_to_root ORDER BY depth
+ORRRRRRRRRRRRRRRRRRRRRRRR
+WITH RECURSIVE
+nodes_to_root as(
+   SELECT *, 0 AS depth FROM people JOIN tree_nodes
+   ON people.id = tree_nodes.nodeable_id 
+   WHERE treeable_id = 1 AND nodeable_id = 8
+	
+	UNION ALL
+	
+	SELECT people.*, tree_nodes.*, nodes_to_root.depth+1 FROM people JOIN tree_nodes
+	ON tree_nodes.nodeable_id = people.id
+	JOIN nodes_to_root
+	ON nodes_to_root.node_parent_id = tree_nodes.node_id
+	 WHERE tree_nodes.treeable_id = 1
+)
+SELECT * FROM nodes_to_root ORDER BY depth DESC
 --------------------------------------------------------------------------------------------------
 -- Get all nodes from the root to the node
 select * from nodes_to_root order by depth desc
@@ -92,7 +104,7 @@ with recursive
 nodeables_with_nodes as (
 	select * from nodes join nodeables
     on nodes.nodeable_id = nodeables.id
-    where tree_id = $node->tree_id
+    where treeable_id = $node->treeable_id
 )
 , 
 cte_recursive as(

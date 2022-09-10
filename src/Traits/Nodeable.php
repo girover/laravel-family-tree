@@ -3,13 +3,15 @@
 namespace Girover\Tree\Traits;
 
 use Girover\Tree\Database\Eloquent\NodeEloquentBuilder;
+use Girover\Tree\Database\NodeQuerySql;
+use Girover\Tree\Database\TreeQueryBuilder;
 use Girover\Tree\Exceptions\TreeException;
-use Girover\Tree\GlobalScopes\OrderByLocationScope;
 use Girover\Tree\GlobalScopes\WivesEagerRelationScope;
 use Girover\Tree\Location;
 use Girover\Tree\Models\TreeNode;
 use Girover\Tree\NodeRelocator;
 use Girover\Tree\Services\NodeableService;
+use Illuminate\Support\Facades\DB;
 
 /**
  *
@@ -38,7 +40,7 @@ trait Nodeable
      */
     public function nodeableService()
     {
-        return $this->nodeable_service ?? (new NodeableService($this));
+        return $this->nodeable_service = $this->nodeable_service ?? (new NodeableService($this));
     }
 
     /**
@@ -64,11 +66,6 @@ trait Nodeable
 
     public static function bootNodeable()
     {
-
-        // Adding global scope o the model
-        static::addGlobalScope(new OrderByLocationScope());
-        static::addGlobalScope(new WivesEagerRelationScope());
-
         static::saving(function ($model) {
             // dd($model);
         });
@@ -109,13 +106,40 @@ trait Nodeable
 
     /**
      * To check if the nodeable model is connected with a node
+     * Here we do not make request to database to find the node
      * 
      * @return bool
      */
     public function isNode()
     {
-        return ($this->location && $this->treeable_id && $this->nodeable_id && $this->node_id) ? true : false;
-        // return $this->node() ? true : false;
+        if(! $this->exists)
+        {
+            return false;
+        }
+
+        return ($this->node_id && $this->nodeable_id && $this->treeable_id) ? true : false;
+    }
+
+    /**
+     * To check if the nodeable model is connected with a node
+     * Here we make request to database to find the node
+     * 
+     * @return bool
+     */
+    public function isAttached()
+    {
+        return $this->node ? true : false;
+    }
+
+    /**
+     * To check if the nodeable model is connected with a node
+     * Here we make request to database to find the node
+     * 
+     * @return bool
+     */
+    public function isNodeQuietly()
+    {
+        return ($this->node_id && $this->nodeable_id) ? true : false;
     }
 
     /**
@@ -154,7 +178,7 @@ trait Nodeable
     }
 
     /**
-     * Relationship for Getting wives og the node.
+     * Relationship for Getting wives of the node.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
@@ -258,17 +282,11 @@ trait Nodeable
      */
     public function isRoot()
     {
-        $this->nodeableService()->throwExceptionIfNotNode();
-
-        if (Location::isRoot($this->location)) {
-            return true;
-        }
-        $father_location = Location::father($this->location);
-
-        return (static::tree($this->treeable_id)->location($father_location)
-                                                ->count())
-                                                ? false
-                                                : true;
+        return $this->node_parent_id 
+                     ? false 
+                     : (($this->node_id and $this->nodeable_id and $this->treeable_id)
+                        ?true
+                        :false);
     }
 
     /**
@@ -278,26 +296,17 @@ trait Nodeable
      */
     public function hasParent()
     {
-        if (Location::isRoot($this->location)) {
-            return false;
-        }
-        $father_location = Location::father($this->location);
-
-        return (bool)static::tree($this->treeable_id)
-                     ->location($father_location)
-                     ->count();
+        return $this->node_parent_id ? true : false;
     }
 
     /**
      * Determine if the node has children
      *
-     * @return 
+     * @return bool
      */
     public function hasChildren()
     {
-        return (bool)static::tree($this->treeable_id)
-                     ->locationREGEXP(Location::childrenREGEXP($this->location))
-                     ->count();
+        return (bool)$this->childrenQuery()->count();
     }
 
     /**
@@ -307,24 +316,56 @@ trait Nodeable
      */
     public function hasSiblings()
     {
-        return (bool)static::tree($this->treeable_id)
-                     ->locationREGEXP(Location::withSiblingsREGEXP($this->location))
-                     ->locationNot($this->location)
-                     ->count();
+        return (bool)$this->siblingsQuery()->count();
     }
 
     /**
-     * which generation this node belongs
+     * Determine if the node has brothers
+     *
+     * @return bool
+     */
+    public function hasBrothers()
+    {
+        return (bool)$this->siblingsQuery()->male()->count();
+    }
+
+    /**
+     * Determine if the node has brothers
+     *
+     * @return bool
+     */
+    public function hasSisters()
+    {
+        return (bool)$this->siblingsQuery()->female()->count();
+    }
+
+    /**
+     * which generation this node belongs to
      *
      * @return int | NULL
      */
     public function generation()
     {
-        if (!$this->isNode()) {
-            throw new TreeException("This model is not a node yet!!!", 1);
-            
-        }
-        return Location::generation($this->location);
+        $this->nodeableService()->throwExceptionIfNotNode();
+
+        return DB::select(NodeQuerySql::generationSql($this))[0]->generation;
+    }
+
+    /**
+     * we get all nodes in specific generation
+     * considering that this node is the first generation
+     *
+     * @param int $generation_number
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function generationNodes($generation_number)
+    {
+        $this->nodeableService()->throwExceptionIfNotNode();
+
+        $nodes = get_class()::fromQuery(NodeQuerySql::subtreeGenerationNodes($this, $generation_number));
+        $nodes->load('wives');
+        
+        return $nodes;
     }
 
     /**
@@ -335,11 +376,11 @@ trait Nodeable
     public function root()
     {
         return static::tree($this->treeable_id)
-                     ->location(Location::firstPossibleSegment())
+                     ->whereNull('node_parent_id')
                      ->first();
     }
 
-    /**
+    /** UPDATED
      * Get the father of this node
      *
      * @return \Illuminate\Database\Eloquent\Model|null
@@ -353,7 +394,7 @@ trait Nodeable
         }
 
         return static::tree($this->treeable_id)
-                     ->location(Location::father($this->location))
+                     ->where('node_id', $this->node_parent_id)
                      ->first();
     }
 
@@ -366,16 +407,14 @@ trait Nodeable
     {
         $this->nodeableService()->throwExceptionIfNotNode();
 
-        return static::tree($this->treeable_id)
-                     ->location(Location::grandfather($this->location))
-                     ->first();
+        return $this->ancestor(2);
     }
 
     /**
      * Get the ancestor with given number of this node
      * if NULL given get father
      *
-     * @param \Girover\Tree\Models\Node
+     * @param \Illuminate\Database\Eloquent\Model
      */
     public function ancestor($ancestor = null)
     {
@@ -383,9 +422,7 @@ trait Nodeable
             return $this->father();
         }
 
-        return static::tree($this->treeable_id)
-                     ->location(Location::ancestor($this->location, $ancestor))
-                     ->first();
+        return get_class()::fromQuery(NodeQuerySql::ancestor($this, $ancestor))->first();
     }
 
     /**
@@ -395,10 +432,7 @@ trait Nodeable
      */
     public function ancestors()
     {
-        return static::tree($this->treeable_id)
-                     ->locationNot($this->location)
-                     ->whereIn('location', Location::allLocationsToRoot($this->location))
-                     ->get();
+        return get_class()::fromQuery(NodeQuerySql::ancestors($this));
     }
 
     /**
@@ -408,9 +442,10 @@ trait Nodeable
      */
     protected function siblingsOfFatherQuery()
     {
+        $father = $this->father();
         return static::tree($this->treeable_id)
-                    ->locationNot(Location::father($this->location))
-                    ->locationREGEXP(Location::withSiblingsREGEXP(Location::father($this->location)));
+                     ->parentId($father->node_parent_id)
+                     ->where('node_id', '<>', $father->node_id);
     }
 
     /**
@@ -418,11 +453,9 @@ trait Nodeable
      *
      * @return \Illuminate\Database\Eloquent\Collection
      */
-    protected function siblingsOfFather()
+    public function siblingsOfFather()
     {
-        return static::tree($this->treeable_id)
-                    ->locationNot(Location::father($this->location))
-                    ->locationREGEXP(Location::withSiblingsREGEXP(Location::father($this->location)))
+        return $this->siblingsOfFatherQuery()
                     ->get();
     }
 
@@ -434,7 +467,6 @@ trait Nodeable
     public function uncles()
     {
         return $this->siblingsOfFatherQuery()->male()->get();
-        // return $this->siblingsOfFatherQuery()->where('gender', 'm')->get();
     }
 
     /**
@@ -455,7 +487,7 @@ trait Nodeable
     protected function childrenQuery()
     {
         return static::tree($this->treeable_id)
-                    ->locationREGEXP(Location::childrenREGEXP($this->location));
+                    ->parentId($this->node_id);
     }
 
     /**
@@ -465,7 +497,9 @@ trait Nodeable
      */
     public function children()
     {
-        return $this->childrenQuery()->get();
+        return $this->childrenQuery()
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -476,7 +510,10 @@ trait Nodeable
      */
     public function sons()
     {
-        return $this->childrenQuery()->male()->get();
+        return $this->childrenQuery()
+                    ->orderBy(sortColumn())
+                    ->male()
+                    ->get();
     }
 
     /**
@@ -487,7 +524,10 @@ trait Nodeable
      */
     public function daughters()
     {
-        return $this->childrenQuery()->female()->get();
+        return $this->childrenQuery()
+                    ->orderBy(sortColumn())
+                    ->female()
+                    ->get();
     }
 
     /**
@@ -527,10 +567,7 @@ trait Nodeable
      */
     protected function countAllSiblings()
     {
-        return static::tree($this->treeable_id)
-                    ->locationNot($this->location)
-                    ->locationREGEXP(Location::withSiblingsREGEXP($this->location))
-                    ->count();
+        return $this->siblingsQuery()->count();
     }
 
     /**
@@ -543,10 +580,8 @@ trait Nodeable
     {
         $this->nodeableService()->validateGender($gender);
 
-        return static::tree($this->treeable_id)
-                    ->locationNot($this->location)
-                    ->locationREGEXP(Location::withSiblingsREGEXP($this->location))
-                    ->where('gender', $gender)
+        return $this->siblingsQuery()
+                    ->where(gender(), $gender)
                     ->count();
     }
 
@@ -567,7 +602,7 @@ trait Nodeable
      */
     public function countBrothers()
     {
-        return $this->countSiblingsByGender('m');
+        return $this->countSiblingsByGender(male());
     }
 
     /**
@@ -577,19 +612,7 @@ trait Nodeable
      */
     public function countSisters()
     {
-        return $this->countSiblingsByGender('f');
-    }
-
-    /**
-     * make a query start for getting descendants
-     *
-     * @return \Girover\Tree\Database\Eloquent\NodeEloquentBuilder
-     */
-    protected function descendantsQuery()
-    {
-        return static::tree($this->treeable_id)
-                     ->locationNot($this->location)
-                     ->where('location', 'like', $this->location.'%');
+        return $this->countSiblingsByGender(female());
     }
 
     /**
@@ -599,7 +622,7 @@ trait Nodeable
      */
     public function descendants()
     {
-        return $this->descendantsQuery()->get();
+        return get_class()::fromQuery(NodeQuerySql::descendants($this));
     }
 
     /**
@@ -609,7 +632,7 @@ trait Nodeable
      */
     public function maleDescendants()
     {
-        return $this->descendantsQuery()->male()->get();
+        return get_class()::fromQuery(NodeQuerySql::descendantsMale($this));
     }
 
     /**
@@ -619,32 +642,7 @@ trait Nodeable
      */
     public function femaleDescendants()
     {
-        return $this->descendantsQuery()->female()->get();
-    }
-
-    /**
-     * Count all descendants of the node.
-     *
-     * @return int
-     */
-    protected function countAllDescendants()
-    {
-        return $this->descendantsQuery()->count();
-    }
-
-    /**
-     * Count all descendants of the node by gender.
-     *
-     * @param string $gender 'm'|'f' the gender of sibling
-     * @return int
-     */
-    protected function countDescendantsByGender($gender)
-    {
-        $this->nodeableService()->validateGender($gender);
-
-        return $this->descendantsQuery()
-                    ->where('gender', $gender)
-                    ->count();
+        return get_class()::fromQuery(NodeQuerySql::descendantsFemale($this));
     }
 
     /**
@@ -654,7 +652,8 @@ trait Nodeable
      */
     public function countDescendants()
     {
-        return $this->countAllDescendants();
+        // Here we subtract 1 from the total to not calculate the root
+        return DB::select(NodeQuerySql::subtreeCountNodes($this))[0]->total_nodes - 1;
     }
 
     /**
@@ -664,7 +663,8 @@ trait Nodeable
      */
     public function countMaleDescendants()
     {
-        return $this->countDescendantsByGender('m');
+        // Here we subtract 1 from the total to not calculate the root
+        return DB::select(NodeQuerySql::subtreeCountMaleNodes($this))[0]->total_nodes - 1;
     }
 
     /**
@@ -674,7 +674,8 @@ trait Nodeable
      */
     public function countFemaleDescendants()
     {
-        return $this->countDescendantsByGender('f');
+        //Here we don't subtract 1 from the total because the root of subtree can't be female
+        return DB::select(NodeQuerySql::subtreeCountFemaleNodes($this))[0]->total_nodes;
     }
 
     /**
@@ -684,9 +685,8 @@ trait Nodeable
      */
     public function firstChild()
     {
-        return  static::tree($this->treeable_id)
-                     ->locationREGEXP(Location::childrenREGEXP($this->location))
-                     ->locationOrder('ASC')
+        return  $this->childrenQuery()
+                     ->orderBy(sortColumn(), 'ASC')
                      ->first();
         // return (new EagerTree($this->tree_id))->pointer->silentlyTo($this)->firstChild();
     }
@@ -698,9 +698,8 @@ trait Nodeable
      */
     public function lastChild()
     {
-        return  static::tree($this->treeable_id)
-                     ->locationREGEXP(Location::childrenREGEXP($this->location))
-                     ->locationOrder('DESC')
+        return  $this->childrenQuery()
+                     ->orderBy(sortColumn(), 'DESC')
                      ->first();
     }
 
@@ -731,8 +730,8 @@ trait Nodeable
     protected function siblingsQuery()
     {
         return static::tree($this->treeable_id)
-                    ->locationNot($this->location)
-                    ->locationREGEXP(Location::withSiblingsREGEXP($this->location));
+                     ->parentId($this->node_parent_id)
+                     ->whereNot('node_id', $this->node_id);
     }
 
     /**
@@ -742,7 +741,9 @@ trait Nodeable
      */
     public function siblings()
     {
-        return $this->siblingsQuery()->get();
+        return $this->siblingsQuery()
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -753,7 +754,8 @@ trait Nodeable
     public function withSiblings()
     {
         return static::tree($this->treeable_id)
-                     ->locationREGEXP(Location::withSiblingsREGEXP($this->location))
+                     ->parentId($this->node_parent_id)
+                     ->orderBy(sortColumn())
                      ->get();
     }
 
@@ -764,7 +766,10 @@ trait Nodeable
      */
     public function brothers()
     {
-        return $this->siblingsQuery()->male()->get();
+        return $this->siblingsQuery()
+                    ->male()
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -774,7 +779,10 @@ trait Nodeable
      */
     public function sisters()
     {
-        return $this->siblingsQuery()->female()->get();
+        return $this->siblingsQuery()
+                    ->female()
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -785,9 +793,7 @@ trait Nodeable
      */
     public function siblingsAndSelf()
     {
-        return static::tree($this->treeable_id)
-                     ->locationREGEXP(Location::withSiblingsREGEXP($this->location))
-                     ->get();
+        return $this->withSiblings();
     }
 
     /**
@@ -798,8 +804,9 @@ trait Nodeable
     public function nextSibling()
     {
         return $this->siblingsQuery()
-                    ->locationAfter($this->location)
-                     ->first();
+                    ->where(sortColumn(), '>', $this->{sortColumn()})
+                    ->orderBy(sortColumn())
+                    ->first();
     }
 
     /**
@@ -810,8 +817,9 @@ trait Nodeable
     public function nextSiblings()
     {
         return $this->siblingsQuery()
-                    ->locationAfter($this->location)
-                     ->get();
+                    ->where(sortColumn(), '>', $this->{sortColumn()})
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -822,8 +830,9 @@ trait Nodeable
     public function nextBrother()
     {
         return $this->siblingsQuery()
-                    ->locationAfter($this->location)
+                    ->where(sortColumn(), '>', $this->{sortColumn()})
                     ->male()
+                    ->orderBy(sortColumn())
                     ->first();
     }
 
@@ -835,8 +844,9 @@ trait Nodeable
     public function nextBrothers()
     {
         return $this->siblingsQuery()
-                    ->locationAfter($this->location)
+                    ->where(sortColumn(), '>', $this->{sortColumn()})
                     ->male()
+                    ->orderBy(sortColumn())
                     ->get();
     }
 
@@ -848,8 +858,9 @@ trait Nodeable
     public function nextSister()
     {
         return $this->siblingsQuery()
-                    ->locationAfter($this->location)
+                    ->where(sortColumn(), '>', $this->{sortColumn()})
                     ->female()
+                    ->orderBy(sortColumn())
                     ->first();
     }
 
@@ -861,9 +872,10 @@ trait Nodeable
     public function nextSisters()
     {
         return $this->siblingsQuery()
-                    ->locationAfter($this->location)
+                    ->where(sortColumn(), '>', $this->{sortColumn()})
                     ->female()
-                     ->get();
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -874,10 +886,9 @@ trait Nodeable
     public function prevSibling()
     {
         return $this->siblingsQuery()
-                     ->withoutGlobalScope(OrderByLocationScope::class)
-                     ->locationBefore($this->location)
-                     ->locationOrder('desc')
-                     ->first();
+                    ->where(sortColumn(), '<', $this->{sortColumn()})
+                    ->orderBy(sortColumn(), 'desc')
+                    ->first();
     }
 
     /**
@@ -888,7 +899,8 @@ trait Nodeable
     public function prevSiblings()
     {
         return $this->siblingsQuery()
-                    ->locationBefore($this->location)
+                    ->where(sortColumn(), '<', $this->{sortColumn()})
+                    ->orderBy(sortColumn())
                     ->get();
     }
 
@@ -900,11 +912,10 @@ trait Nodeable
     public function prevBrother()
     {
         return $this->siblingsQuery()
-                    ->withoutGlobalScope(OrderByLocationScope::class)
-                    ->locationBefore($this->location)
+                    ->where(sortColumn(), '<', $this->{sortColumn()})
                     ->male()
-                    ->locationOrder('desc')
-                     ->first();
+                    ->orderBy(sortColumn(), 'desc')
+                    ->first();
     }
 
     /**
@@ -915,8 +926,9 @@ trait Nodeable
     public function prevBrothers()
     {
         return $this->siblingsQuery()
-                    ->locationBefore($this->location)
+                    ->where(sortColumn(), '<', $this->{sortColumn()})
                     ->male()
+                    ->orderBy(sortColumn())
                     ->get();
     }
 
@@ -928,11 +940,10 @@ trait Nodeable
     public function prevSister()
     {
         return $this->siblingsQuery()
-                    ->withoutGlobalScope(OrderByLocationScope::class)
-                    ->locationBefore($this->location)
+                    ->where(sortColumn(), '<', $this->{sortColumn()})
                     ->female()
-                    ->locationOrder('desc')
-                     ->first();
+                    ->orderBy(sortColumn(), 'desc')
+                    ->first();
     }
 
     /**
@@ -943,9 +954,10 @@ trait Nodeable
     public function prevSisters()
     {
         return $this->siblingsQuery()
-                    ->locationBefore($this->location)
+                    ->where(sortColumn(), '<', $this->{sortColumn()})
                     ->female()
-                     ->get();
+                    ->orderBy(sortColumn())
+                    ->get();
     }
 
     /**
@@ -956,6 +968,7 @@ trait Nodeable
     public function firstSibling()
     {
         return  $this->siblingsQuery()
+                     ->orderBy(sortColumn())
                      ->first();
     }
 
@@ -967,8 +980,7 @@ trait Nodeable
     public function lastSibling()
     {
         return  $this->siblingsQuery()
-                     ->withoutGlobalScope(OrderByLocationScope::class)
-                     ->locationOrder('desc')
+                     ->orderBy(sortColumn(), 'desc')
                      ->first();
     }
 
@@ -981,6 +993,7 @@ trait Nodeable
     {
         return  $this->siblingsQuery()
                      ->male()
+                     ->orderBy(sortColumn())
                      ->first();
     }
 
@@ -992,9 +1005,8 @@ trait Nodeable
     public function lastBrother()
     {
         return  $this->siblingsQuery()
-                     ->withoutGlobalScope(OrderByLocationScope::class)
                      ->male()
-                     ->locationOrder('desc')
+                     ->orderBy(sortColumn(), 'desc')
                      ->first();
     }
 
@@ -1007,6 +1019,7 @@ trait Nodeable
     {
         return  $this->siblingsQuery()
                      ->female()
+                     ->orderBy(sortColumn())
                      ->first();
     }
 
@@ -1018,9 +1031,8 @@ trait Nodeable
     public function lastSister()
     {
         return  $this->siblingsQuery()
-                     ->withoutGlobalScope(OrderByLocationScope::class)
                      ->female()
-                     ->locationOrder('desc')
+                     ->orderBy(sortColumn(), 'desc')
                      ->first();
     }
 
@@ -1032,7 +1044,7 @@ trait Nodeable
      * @param string gender of the new sibling
      * @return \Girover\Tree\Models\Node|null
      */
-    public function newSibling($data, $gender = 'm')
+    public function newSibling($data, $gender = '')
     {
         return $this->nodeableService()->newSibling($data, $gender);
     }
@@ -1045,7 +1057,7 @@ trait Nodeable
      */
     public function newBrother($data)
     {
-        return $this->newSibling($data, 'm');
+        return $this->newSibling($data, male());
     }
 
     /**
@@ -1057,7 +1069,7 @@ trait Nodeable
      */
     public function newSister($data)
     {
-        return $this->newSibling($data, 'f');
+        return $this->newSibling($data, female());
     }
 
     /**
@@ -1067,12 +1079,12 @@ trait Nodeable
      * @param string $gender 'm'|'f'
      * @return \Girover\Tree\Models\Node|null
      */
-    public function newChild($data, $gender = 'm')
+    public function newChild($data, $gender = '')
     {
         if ($this->isFemale()) {
             throw new TreeException("No child can be created for female nodes", 1);
-            
         }
+
         return $this->nodeableService()->newChild(...func_get_args());
     }
 
@@ -1084,7 +1096,7 @@ trait Nodeable
      */
     public function newSon($data)
     {
-        return $this->newChild($data, 'm');
+        return $this->newChild($data, male());
     }
 
     /**
@@ -1095,18 +1107,7 @@ trait Nodeable
      */
     public function newDaughter($data)
     {
-        return $this->newChild($data, 'f');
-    }
-
-    /**
-     * Updating the location of the node
-     * this will update location for all the node's descendants too.
-     * 
-     * @return int
-     */
-    public function updateLocation($new_location)
-    {
-        return $this->nodeableService()->updateLocation($new_location);
+        return $this->newChild($data, female());
     }
 
     /**
@@ -1171,12 +1172,14 @@ trait Nodeable
     /**
      * Determine if the node is an ancestor of the given node.
      *
-     * @param \Girover\Tree\Models\Node
+     * @param \Illuminate\Database\Eloquent\Model
      * @return bool
      */
     public function isAncestorOf($node)
     {
-        return Location::areAncestorAndChild($this->location, $node->location);
+        $ancestors = $node->ancestors();
+
+        return (bool)$ancestors->where('nodeable_id', $this->nodeable_id)->count();
     }
 
     /**
@@ -1187,11 +1190,7 @@ trait Nodeable
      */
     public function isFatherOf($node)
     {
-        if ((! $node instanceof static) || ($this->treeable_id !== $node->treeable_id)) {
-            return false;
-        }
-
-        return Location::areFatherAndChild($this->location, $node->location);
+        return (bool)($node->node_parent_id == $this->node_id);
     }
 
     /**
@@ -1202,11 +1201,7 @@ trait Nodeable
      */
     public function isChildOf($node)
     {
-        if ((! $node instanceof static) || ($this->treeable_id !== $node->treeable_id)) {
-            return false;
-        }
-
-        return Location::areFatherAndChild($node->location, $this->location);
+        return (bool)($this->node_parent_id == $node->node_id);
     }
 
     /**
@@ -1216,11 +1211,7 @@ trait Nodeable
      */
     public function isSiblingOf($node)
     {
-        if ((! $node instanceof static) || ($this->treeable_id !== $node->treeable_id)) {
-            return false;
-        }
-
-        return Location::areSiblings($this->location, $node->location);
+        return (bool)($this->node_parent_id == $node->node_parent_id);
     }
 
     /**
@@ -1242,7 +1233,7 @@ trait Nodeable
      */
     public function isMale()
     {
-        return ($this->gender === 'm') ? true : false;
+        return ($this->{gender()} === male()) ? true : false;
     }
 
     /**
@@ -1252,7 +1243,7 @@ trait Nodeable
      */
     public function isFemale()
     {
-        return ($this->gender === 'f') ? true : false;
+        return ($this->{gender()} === female()) ? true : false;
     }
 
     /**
@@ -1311,11 +1302,11 @@ trait Nodeable
     /**
      * Getting the node that this nodeable is connected with
      * 
-     * @return \Illuminate\Database\Eloquent\Model|null
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
      */
     public function node()
     {
-        return $this->hasOne(TreeNode::class, 'nodeable_id', $this->getKeyName())->first();
+        return $this->hasOne(TreeNode::class, 'nodeable_id', $this->getKeyName());
     }
 
     /**
@@ -1348,7 +1339,7 @@ trait Nodeable
      *
      * @return string html code for the tree from this node
      */
-    public function toTree()
+    public function buildTree()
     {
         return $this->nodeableService()->buildTreeFromANode();
     }
@@ -1360,7 +1351,7 @@ trait Nodeable
      */
     public function toHtml()
     {
-        return $this->toTree();
+        return $this->buildTree();
     }
 
     /**
@@ -1368,8 +1359,18 @@ trait Nodeable
      *
      * @return string html code for the tree from this node
      */
-    public function draw()
+    public function build()
     {
-        return $this->toTree();
+        return $this->buildTree();
+    }
+
+    /**
+     * Rendering the generate Tree Html code from this node
+     *
+     * @return string html code for the tree from this node
+     */
+    public function render()
+    {
+        return $this->buildTree();
     }
 }

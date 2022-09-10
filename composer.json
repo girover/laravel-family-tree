@@ -34,7 +34,8 @@
         ],
         "psr-4": {
             "Girover\\Tree\\": "src",
-            "Girover\\Tree\\Database\\Factories\\": "database/factories"
+            "Girover\\Tree\\Database\\Factories\\": "database/factories",
+            "Girover\\Tree\\Tests\\": "tests"
         }
     },
     "autoload-dev": {
